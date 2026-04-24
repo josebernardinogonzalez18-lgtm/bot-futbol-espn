@@ -1,44 +1,49 @@
-name: MLB Live Bot
+name: MLB Live Bot Pro
 
 on:
   schedule:
-    # Se ejecuta cada 5 minutos
+    # Se ejecuta cada 5 minutos (puedes cambiarlo a '*/2' si quieres más velocidad)
     - cron: '*/5 * * * *'
-  # Permite ejecutarlo manualmente desde la pestaña Actions
+  # Permite activarlo manualmente desde el móvil en la pestaña Actions
   workflow_dispatch:
 
+# PERMISOS CRÍTICOS: Permite al bot guardar el estado del juego en el repo
 permissions:
   contents: write
 
 jobs:
-  run-mlb-bot:
+  build-and-run:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout del repositorio
+      - name: 1. Descargar código del repo
         uses: actions/checkout@v4
 
-      - name: Configurar Python
+      - name: 2. Configurar Python 3.9
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: Instalar dependencias
+      - name: 3. Instalar librerías necesarias
         run: |
           pip install requests
 
-      - name: Ejecutar script de MLB
+      - name: 4. Ejecutar el Bot de MLB
         env:
+          # Estas son las llaves que configuraste en Settings > Secrets
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python bot.py
 
-      - name: Guardar y subir estado
+      - name: 5. Guardar cambios de marcador (Git Push)
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-          # Añadimos el archivo de estado para que el bot "recuerde" los goles/carreras
+          
+          # Solo intenta subir si el archivo de estado cambió
           git add ultimo_estado_mlb.json || exit 0
-          # Solo hacemos commit si hubo cambios en el marcador
-          git commit -m "Actualización marcador MLB [skip ci]" || exit 0
+          
+          # Si no hay cambios, el comando commit fallaría, por eso el "|| exit 0"
+          git commit -m "Actualización de marcadores [skip ci]" || exit 0
+          
           git push
