@@ -2,7 +2,7 @@ import requests
 import json
 import os
 
-# Configuración MLB
+# Configuración
 URL = "http://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard"
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
@@ -12,24 +12,21 @@ def enviar_telegram(mensaje):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     try:
         r = requests.post(url, data={"chat_id": CHAT_ID, "text": mensaje})
-        print(f"Respuesta Telegram: {r.status_code}")
+        print(f"Telegram Status: {r.status_code}")
     except Exception as e:
-        print(f"Error enviando a Telegram: {e}")
+        print(f"Error Telegram: {e}")
 
 def cargar_estado():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, "r") as f:
-            try:
-                return json.load(f)
+            try: return json.load(f)
             except: return {}
     return {}
 
-def guardar_estado(estado):
-    with open(STATE_FILE, "w") as f:
-        json.dump(estado, f)
-
-def monitorear_mlb():
-    print("Consultando API de ESPN...")
+def monitorear():
+    # Mensaje de vida para saber que el script corrió
+    print("Iniciando monitoreo MLB...")
+    
     try:
         response = requests.get(URL).json()
         eventos = response.get('events', [])
@@ -37,51 +34,49 @@ def monitorear_mlb():
         nuevo_estado = {}
 
         if not eventos:
-            print("No hay eventos programados para hoy.")
+            enviar_telegram("⚠️ El bot corrió pero no encontró partidos programados para hoy en ESPN.")
             return
 
         for evento in eventos:
             id_p = evento['id']
             nombre = evento['shortName']
             status_obj = evento['status']['type']
-            status_desc = status_obj['description'] # "In Progress", "Final", "Scheduled"
-            inning = status_obj.get('detail', "TBD")
+            status_desc = status_obj['description'] # Scheduled, In Progress, Final
+            detalle = status_obj.get('detail', "") # "Top 3rd", "Mid 4th", "Final"
             
-            # Extraer equipos y carreras
-            competitors = evento['competitions'][0]['competitors']
-            # ESPN suele poner al visitante en index 1 y local en 0
-            team1 = competitors[0]['team']['abbreviation']
-            score1 = competitors[0].get('score', "0")
-            team2 = competitors[1]['team']['abbreviation']
-            score2 = competitors[1].get('score', "0")
-            
-            marcador = f"{team2} {score2} - {score1} {team1}" # Formato estándar Visita-Local
-            nuevo_estado[id_p] = {"marcador": marcador, "status": status_desc}
+            # Marcador
+            comp = evento['competitions'][0]['competitors']
+            t1, s1 = comp[1]['team']['abbreviation'], comp[1].get('score', "0")
+            t2, s2 = comp[0]['team']['abbreviation'], comp[0].get('score', "0")
+            marcador = f"{t1} {s1} - {s2} {t2}"
 
-            # LÓGICA DE NOTIFICACIÓN
+            nuevo_estado[id_p] = {"marcador": marcador, "status": status_desc, "detalle": detalle}
+
+            # --- LÓGICA DE ENVÍO ---
             if id_p not in estado_anterior:
-                # Si es un partido nuevo y ya empezó, avisar
+                # Si el juego ya empezó, avisar de inmediato quién va ganando
                 if status_desc == "In Progress":
-                    enviar_telegram(f"⚾ Seguimiento iniciado: {nombre}\nMarcador actual: {marcador} ({inning})")
-                elif status_desc == "Scheduled":
-                    print(f"Partido programado: {nombre}")
+                    enviar_telegram(f"📡 CONECTADO: {nombre}\nEstado: {detalle}\nMarcador: {marcador}")
             else:
-                # 1. Detectar cambio de marcador
+                # 1. Cambio de marcador (Carreras)
                 if marcador != estado_anterior[id_p]["marcador"]:
-                    enviar_telegram(f"🔥 ¡CARRERA en {nombre}!\nScore: {marcador}\nMomento: {inning}")
+                    enviar_telegram(f"⚾ ¡ANOTACIÓN en {nombre}!\nMarcador: {marcador}\nMomento: {detalle}")
                 
-                # 2. Detectar inicio
-                if status_desc == "In Progress" and estado_anterior[id_p]["status"] != "In Progress":
-                    enviar_telegram(f"🏟️ ¡Playball! Empieza: {nombre}")
-                
-                # 3. Detectar fin
+                # 2. Cambio de Inning (Medio tiempo / Cambio de lado)
+                # Detecta cuando el detalle cambia (ej. de Top a Mid o de Mid a Bottom)
+                if detalle != estado_anterior[id_p]["detalle"]:
+                    enviar_telegram(f"🔄 Actualización {nombre}: {detalle}\nMarcador: {marcador}")
+
+                # 3. Final del partido
                 if status_desc == "Final" and estado_anterior[id_p]["status"] != "Final":
-                    enviar_telegram(f"🏁 Juego Terminado: {nombre}\nResultado Final: {marcador}")
+                    enviar_telegram(f"🏁 JUEGO TERMINADO: {nombre}\nFinal: {marcador}")
+
+        with open(STATE_FILE, "w") as f:
+            json.dump(nuevo_estado, f)
             
-        guardar_estado(nuevo_estado)
-        print("Proceso completado con éxito.")
     except Exception as e:
-        print(f"Error general: {e}")
+        print(f"Error: {e}")
+        enviar_telegram(f"❌ Error en el bot: {str(e)}")
 
 if __name__ == "__main__":
-    monitorear_mlb()
+    monitorear()
