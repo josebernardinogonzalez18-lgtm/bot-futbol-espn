@@ -2,12 +2,11 @@ import requests
 import json
 import os
 
-# Configuración (Usa variables de entorno por seguridad)
-LEAGUE = "mex.1" 
-URL = f"http://site.api.espn.com/apis/site/v2/sports/soccer/{LEAGUE}/scoreboard"
+# Configuración MLB
+URL = "http://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard"
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-STATE_FILE = "ultimo_estado.json"
+STATE_FILE = "ultimo_estado_mlb.json"
 
 def enviar_telegram(mensaje):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -16,14 +15,16 @@ def enviar_telegram(mensaje):
 def cargar_estado():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, "r") as f:
-            return json.load(f)
+            try:
+                return json.load(f)
+            except: return {}
     return {}
 
 def guardar_estado(estado):
     with open(STATE_FILE, "w") as f:
         json.dump(estado, f)
 
-def monitorear():
+def monitorear_mlb():
     try:
         response = requests.get(URL).json()
         eventos = response.get('events', [])
@@ -32,30 +33,35 @@ def monitorear():
 
         for evento in eventos:
             id_p = evento['id']
-            nombre = evento['shortName']
+            nombre = evento['shortName'] # Ej: "NYY @ LAD"
             status = evento['status']['type']['description']
-            home = evento['competitions'][0]['competitors'][0]['team']['shortDisplayName']
-            home_s = evento['competitions'][0]['competitors'][0]['score']
-            away = evento['competitions'][0]['competitors'][1]['team']['shortDisplayName']
-            away_s = evento['competitions'][0]['competitors'][1]['score']
-            marcador = f"{home_s}-{away_s}"
-
+            inning = evento['status']['type']['detail'] # Ej: "Top 5th" o "Final"
+            
+            # Equipos y Carreras (Runs)
+            home_team = evento['competitions'][0]['competitors'][0]['team']['abbreviation']
+            home_runs = evento['competitions'][0]['competitors'][0]['score']
+            away_team = evento['competitions'][0]['competitors'][1]['team']['abbreviation']
+            away_runs = evento['competitions'][0]['competitors'][1]['score']
+            
+            marcador = f"{away_team} {away_runs} - {home_runs} {home_team}"
             nuevo_estado[id_p] = {"marcador": marcador, "status": status}
 
             if id_p in estado_anterior:
-                # Detectar Gol
+                # 1. Detectar cambio de marcador (Carreras)
                 if marcador != estado_anterior[id_p]["marcador"]:
-                    enviar_telegram(f"⚽ GOL en {nombre}!\n{home} {home_s} - {away_s} {away}")
-                # Detectar Inicio
+                    enviar_telegram(f"⚾ ¡Cambio en el marcador! ({inning})\n{marcador}")
+                
+                # 2. Detectar Inicio del juego
                 if status == "In Progress" and estado_anterior[id_p]["status"] != "In Progress":
-                    enviar_telegram(f"▶️ Empezó: {nombre}")
-                # Detectar Fin
+                    enviar_telegram(f"🏟️ ¡Playball! Empieza: {nombre}")
+                
+                # 3. Detectar Fin del juego
                 if status == "Final" and estado_anterior[id_p]["status"] != "Final":
-                    enviar_telegram(f"🏁 Final: {nombre} ({marcador})")
+                    enviar_telegram(f"🏁 Juego Terminado: {nombre}\nFinal: {marcador}")
             
         guardar_estado(nuevo_estado)
     except Exception as e:
         print(f"Error: {e}")
 
 if __name__ == "__main__":
-    monitorear()
+    monitorear_mlb()
