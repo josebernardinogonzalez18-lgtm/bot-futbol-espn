@@ -1,0 +1,35 @@
+name: Soccer Bot Update
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # Se ejecuta cada 5 minutos
+  workflow_dispatch:      # Permite ejecutarlo manualmente
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Ejecutar Bot
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python bot.py
+
+      - name: Guardar estado
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "action@github.com"
+          git add ultimo_estado.json
+          git commit -m "Actualizar estado de partidos" || exit 0
+          git push
