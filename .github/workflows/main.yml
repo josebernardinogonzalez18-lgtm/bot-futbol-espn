@@ -1,4 +1,4 @@
-name: MLB Live Bot Pro
+name: Futbol Live Bot Pro
 
 on:
   schedule:
@@ -28,7 +28,7 @@ jobs:
         run: |
           pip install requests
 
-      - name: 4. Ejecutar el Bot de MLB
+      - name: 4. Ejecutar el Bot de Fútbol
         env:
           # Estas son las llaves que configuraste en Settings > Secrets
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
@@ -40,10 +40,10 @@ jobs:
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           
-          # Solo intenta subir si el archivo de estado cambió
-          git add ultimo_estado_mlb.json || exit 0
+          # ⚠️ CAMBIO CLAVE: Ahora apuntamos al nuevo archivo de fútbol
+          git add ultimo_estado_futbol.json || exit 0
           
           # Si no hay cambios, el comando commit fallaría, por eso el "|| exit 0"
-          git commit -m "Actualización de marcadores [skip ci]" || exit 0
+          git commit -m "Actualización de marcadores de fútbol [skip ci]" || exit 0
           
           git push
